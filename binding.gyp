@@ -1,7 +1,11 @@
 {
+  'variables': {
+    'module_name': 'odbc',
+    'module_path': './lib/bindings/napi-v8'
+  },
   'targets' : [
     {
-      'target_name' : 'odbc',
+      'target_name' : '<(module_name)',
       'sources' : [
         'src/odbc.cpp',
         'src/odbc_connection.cpp',
@@ -92,7 +96,7 @@
       "copies": [
         {
           "files": [ "<(PRODUCT_DIR)/<(module_name).node" ],
-          "destination": "<(module_path)"
+          "destination": "lib/bindings/napi-v8"
         }
       ]
     }

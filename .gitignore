@@ -6,4 +6,4 @@ core*
 *.env
 .vscode
 build*/
-lib/bindings
+# lib/bindings - included for prebuilt binary distribution
