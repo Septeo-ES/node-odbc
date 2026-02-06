@@ -1797,7 +1797,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
               case SQL_VARCHAR:
               case SQL_LONGVARCHAR:
               default:
-                bufferSize = ((data->parameters[i]->ColumnSize * MAX_UTF8_BYTES) + 1) * sizeof(SQLCHAR);
+                bufferSize = ((data->parameters[i]->ColumnSize * MAX_UTF8_BYTES) + 1) * sizeof(SQLWCHAR); // MODIFICADO: Unicode
                 data->parameters[i]->ValueType = SQL_C_CHAR;
                 data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize]();
                 data->parameters[i]->BufferLength = bufferSize;
@@ -3354,15 +3354,15 @@ bind_buffers
         }
         break;
       case SQL_LONGVARCHAR:
-        column->bind_type = SQL_C_CHAR;
+        column->bind_type = SQL_C_WCHAR; // MODIFICADO: Usar Unicode
         if (data->fetch_size == 1 || data->get_data_supports.block)
         {
           column->is_long_data = true;
         } else {
-          size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
-          column->buffer_size = character_count * sizeof(SQLCHAR);
+          size_t character_count = column->ColumnSize + 1; // MODIFICADO: WCHAR no necesita MAX_UTF8_BYTES
+          column->buffer_size = character_count * sizeof(SQLWCHAR); // MODIFICADO: Unicode
           data->bound_columns[i].buffer =
-            new SQLCHAR[character_count * data->fetch_size]();
+            new SQLWCHAR[character_count * data->fetch_size](); // MODIFICADO: Unicode
         }
         break;
       case SQL_LONGVARBINARY:
@@ -3381,10 +3381,10 @@ bind_buffers
       case SQL_NUMERIC:
       {
         size_t character_count = column->ColumnSize + 2;
-        column->buffer_size = character_count * sizeof(SQLCHAR);
-        column->bind_type = SQL_C_CHAR;
+        column->buffer_size = character_count * sizeof(SQLWCHAR); // MODIFICADO: Unicode
+        column->bind_type = SQL_C_WCHAR; // MODIFICADO: Usar Unicode
         data->bound_columns[i].buffer =
-          new SQLCHAR[character_count * data->fetch_size]();
+          new SQLWCHAR[character_count * data->fetch_size](); // MODIFICADO: Unicode
         break;
       }
 
@@ -3471,17 +3471,17 @@ bind_buffers
       case SQL_VARCHAR:
       default:
       {
-        column->bind_type = SQL_C_CHAR;
+        column->bind_type = SQL_C_WCHAR; // MODIFICADO: Usar Unicode
         // Fixes a known issue with SQL Server and (max) length fields
         if (column->ColumnSize == 0)
         {
           column->is_long_data = true;
           break;
         }
-        size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
-        column->buffer_size = character_count * sizeof(SQLCHAR);
+        size_t character_count = column->ColumnSize + 1; // MODIFICADO: WCHAR no necesita MAX_UTF8_BYTES
+        column->buffer_size = character_count * sizeof(SQLWCHAR); // MODIFICADO: Unicode
         data->bound_columns[i].buffer =
-          new SQLCHAR[character_count * data->fetch_size]();
+          new SQLWCHAR[character_count * data->fetch_size](); // MODIFICADO: Unicode
         break;
       }
     }
@@ -4150,6 +4150,9 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
               case SQL_C_DOUBLE:
                 value = Napi::Number::New(env, storedRow[j].double_data);
                 break;
+              case SQL_C_WCHAR: // MODIFICADO: Soportar Unicode para números
+                value = Napi::Number::New(env, wcstod((const wchar_t*)storedRow[j].wchar_data, NULL));
+                break;
               default:
                 value = Napi::Number::New(env, atof((const char*)storedRow[j].char_data));
                 break;
@@ -4224,7 +4227,12 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
           case SQL_VARCHAR :
           case SQL_LONGVARCHAR :
           default:
-            value = Napi::String::New(env, (const char*)storedRow[j].char_data, storedRow[j].size);
+            // MODIFICADO: Verificar bind_type para soportar Unicode
+            if (columns[j]->bind_type == SQL_C_WCHAR) {
+              value = Napi::String::New(env, (const char16_t*)storedRow[j].wchar_data, storedRow[j].size / sizeof(SQLWCHAR));
+            } else {
+              value = Napi::String::New(env, (const char*)storedRow[j].char_data, storedRow[j].size);
+            }
             break;
         }
       }
@@ -4251,3 +4259,4 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
 
   return rows;
 }
+
