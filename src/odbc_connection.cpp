@@ -3438,11 +3438,12 @@ bind_buffers
       case SQL_VARBINARY:
       {
         column->bind_type = SQL_C_BINARY;
-        // Fixes a known issue with SQL Server and (max) length fields
+        // MODIFICADO: HFSQL returns ColumnSize=0 for computed expressions
+        // (NULL AS alias, REPLACE()->empty, etc). Allocate minimum buffer
+        // instead of marking as long_data which breaks on HFSQL.
         if (column->ColumnSize == 0)
         {
-          column->is_long_data = true;
-          break;
+          column->ColumnSize = 1;
         }
         column->buffer_size = column->ColumnSize;
         data->bound_columns[i].buffer =
@@ -3454,11 +3455,12 @@ bind_buffers
       case SQL_WVARCHAR:
       {
         column->bind_type = SQL_C_WCHAR;
-        // Fixes a known issue with SQL Server and (max) length fields
+        // MODIFICADO: HFSQL returns ColumnSize=0 for computed expressions
+        // (NULL AS alias, REPLACE()->empty, etc). Allocate minimum buffer
+        // instead of marking as long_data which breaks on HFSQL.
         if (column->ColumnSize == 0)
         {
-          column->is_long_data = true;
-          break;
+          column->ColumnSize = 1;
         }
         size_t character_count = column->ColumnSize + 1;
         column->buffer_size = character_count * sizeof(SQLWCHAR);
@@ -3472,11 +3474,13 @@ bind_buffers
       default:
       {
         column->bind_type = SQL_C_WCHAR; // MODIFICADO: Usar Unicode
-        // Fixes a known issue with SQL Server and (max) length fields
+        // MODIFICADO: HFSQL returns ColumnSize=0 for computed expressions
+        // (NULL AS alias, REPLACE()->empty, TRIM(CONCAT())->empty).
+        // Allocate minimum buffer instead of marking as long_data which
+        // causes SQLGetData to fail on HFSQL driver.
         if (column->ColumnSize == 0)
         {
-          column->is_long_data = true;
-          break;
+          column->ColumnSize = 1;
         }
         size_t character_count = column->ColumnSize + 1; // MODIFICADO: WCHAR no necesita MAX_UTF8_BYTES
         column->buffer_size = character_count * sizeof(SQLWCHAR); // MODIFICADO: Unicode
@@ -3621,9 +3625,12 @@ fetch_and_store
                 buffer_size,
                 &string_length_or_indicator
               );
+              // MODIFICADO: If SQLGetData fails (e.g. HFSQL can't convert
+              // unknown type), treat as NULL instead of aborting entire row
               if (!SQL_SUCCEEDED(return_code))
               {
-                return return_code;
+                row[column_index].size = SQL_NULL_DATA;
+                continue;
               }
 
               // If the data is null, simply indicate and continue to the next
