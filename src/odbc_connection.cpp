@@ -3343,11 +3343,13 @@ bind_buffers
       // SQLBindCol.
       case SQL_WLONGVARCHAR:
         column->bind_type = SQL_C_WCHAR;
-        if (data->fetch_size == 1 || data->get_data_supports.block)
+        // MODIFICADO: Always bind with SQLBindCol instead of SQLGetData.
+        // HFSQL reports SQL_LONGVARCHAR/SQL_WLONGVARCHAR with ColumnSize=2GB
+        // for computed expressions (REPLACE, CONCAT, TRIM). SQLGetData fails
+        // silently on HFSQL, returning only 1 row. Cap buffer at 8192 chars.
         {
-          column->is_long_data = true;
-        } else {
-          size_t character_count = column->ColumnSize + 1;
+          size_t capped_size = (column->ColumnSize > 8192 || column->ColumnSize == 0) ? 8192 : column->ColumnSize;
+          size_t character_count = capped_size + 1;
           column->buffer_size = character_count * sizeof(SQLWCHAR);
           data->bound_columns[i].buffer =
             new SQLWCHAR[character_count * data->fetch_size]();
@@ -3355,24 +3357,22 @@ bind_buffers
         break;
       case SQL_LONGVARCHAR:
         column->bind_type = SQL_C_WCHAR; // MODIFICADO: Usar Unicode
-        if (data->fetch_size == 1 || data->get_data_supports.block)
+        // MODIFICADO: Same as SQL_WLONGVARCHAR above - always bind.
         {
-          column->is_long_data = true;
-        } else {
-          size_t character_count = column->ColumnSize + 1; // MODIFICADO: WCHAR no necesita MAX_UTF8_BYTES
-          column->buffer_size = character_count * sizeof(SQLWCHAR); // MODIFICADO: Unicode
+          size_t capped_size = (column->ColumnSize > 8192 || column->ColumnSize == 0) ? 8192 : column->ColumnSize;
+          size_t character_count = capped_size + 1;
+          column->buffer_size = character_count * sizeof(SQLWCHAR);
           data->bound_columns[i].buffer =
-            new SQLWCHAR[character_count * data->fetch_size](); // MODIFICADO: Unicode
+            new SQLWCHAR[character_count * data->fetch_size]();
         }
         break;
       case SQL_LONGVARBINARY:
         column->bind_type = SQL_C_BINARY;
-        if (data->fetch_size == 1 || data->get_data_supports.block)
+        // MODIFICADO: Same approach - always bind.
         {
-          column->is_long_data = true;
-        } else {
-          column->buffer_size = (column->ColumnSize) * sizeof(SQLCHAR);
-          data->bound_columns[i].buffer = new SQLCHAR[column->buffer_size]();
+          size_t capped_size = (column->ColumnSize > 8192 || column->ColumnSize == 0) ? 8192 : column->ColumnSize;
+          column->buffer_size = capped_size * sizeof(SQLCHAR);
+          data->bound_columns[i].buffer = new SQLCHAR[column->buffer_size * data->fetch_size]();
         }
         break;
 
